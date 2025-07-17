@@ -478,7 +478,10 @@ function getFormData() {
     
     data.totalGST = data.cgstAmount + data.sgstAmount + data.igstAmount;
     data.total = subtotal + data.totalGST;
-    data.invoiceNumber = 'INV-PREVIEW';
+    
+    // Generate preview invoice number with current year
+    const currentYear = new Date().getFullYear();
+    data.invoiceNumber = `INV-${currentYear}-PREVIEW`;
     
     return data;
 }

@@ -83,6 +83,27 @@ class Invoice(db.Model):
         self.total_gst = self.cgst_amount + self.sgst_amount + self.igst_amount
         self.total = self.subtotal + self.total_gst
 
+class InvoiceSequence(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    year = db.Column(db.Integer, nullable=False, unique=True)
+    last_number = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    @classmethod
+    def get_next_number(cls, year):
+        """Get the next sequential number for the given year"""
+        sequence = cls.query.filter_by(year=year).first()
+        if not sequence:
+            sequence = cls(year=year, last_number=1)
+            db.session.add(sequence)
+        else:
+            sequence.last_number += 1
+            sequence.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        return sequence.last_number
+
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)

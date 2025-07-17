@@ -1,6 +1,6 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from app import app, db
-from models import Company, Client, Invoice, LineItem, Product
+from models import Company, Client, Invoice, LineItem, Product, InvoiceSequence
 from datetime import datetime, timedelta
 from decimal import Decimal
 import logging
@@ -123,9 +123,10 @@ def save_invoice():
             flash('Please set up company information first', 'error')
             return redirect(url_for('company_settings'))
         
-        # Generate invoice number
-        last_invoice = Invoice.query.order_by(Invoice.id.desc()).first()
-        invoice_number = f"INV-{(last_invoice.id + 1) if last_invoice else 1:05d}"
+        # Generate sequential invoice number using dedicated sequence table
+        current_year = datetime.now().year
+        next_number = InvoiceSequence.get_next_number(current_year)
+        invoice_number = f"INV-{current_year}-{next_number:05d}"
         
         # Create invoice
         issue_date = datetime.strptime(request.form.get('issue_date'), '%Y-%m-%d').date()
