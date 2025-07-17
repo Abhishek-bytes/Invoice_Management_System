@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Invoice History - Invoice Management System{% endblock %}
+
+{% block content %}
+<!-- Statistics Dashboard -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.total_invoices }}</div>
+        <div class="stat-label">Total Invoices</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.paid_invoices }}</div>
+        <div class="stat-label">Paid Invoices</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.pending_invoices }}</div>
+        <div class="stat-label">Pending Invoices</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">{{ stats.overdue_invoices }}</div>
+        <div class="stat-label">Overdue Invoices</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">${{ "%.2f"|format(stats.total_revenue) }}</div>
+        <div class="stat-label">Total Revenue</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-number">${{ "%.2f"|format(stats.pending_amount) }}</div>
+        <div class="stat-label">Pending Amount</div>
+    </div>
+</div>
+
+<!-- Search and Filter -->
+<div class="form-section">
+    <h2 class="section-title">
+        <i class="fas fa-search"></i> Search & Filter
+    </h2>
+    <form method="GET" action="{{ url_for('invoice_history') }}">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="search">Search</label>
+                <input type="text" id="search" name="search" placeholder="Invoice number or client name..." value="{{ search }}">
+            </div>
+            <div class="form-group">
+                <label for="status">Status</label>
+                <select id="status" name="status">
+                    <option value="">All Statuses</option>
+                    <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+                    <option value="paid" {% if status_filter == 'paid' %}selected{% endif %}>Paid</option>
+                    <option value="overdue" {% if status_filter == 'overdue' %}selected{% endif %}>Overdue</option>
+                </select>
+            </div>
+            <div class="form-group d-flex align-items-end">
+                <button type="submit" class="btn btn-primary me-2">
+                    <i class="fas fa-search"></i> Search
+                </button>
+                <a href="{{ url_for('invoice_history') }}" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Invoice List -->
+<div class="form-section">
+    <h2 class="section-title">
+        <i class="fas fa-list"></i> Invoice List
+    </h2>
+    
+    {% if invoices %}
+    <div class="invoice-list">
+        {% for invoice in invoices %}
+        <div class="invoice-card">
+            <div class="invoice-header">
+                <div class="invoice-number">{{ invoice.invoice_number }}</div>
+                <div class="invoice-status status-{{ invoice.status }}">{{ invoice.status.title() }}</div>
+            </div>
+            
+            <div class="invoice-details">
+                <div class="detail-item">
+                    <span class="detail-label">Client:</span>
+                    <span class="detail-value">{{ invoice.client.name }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Issue Date:</span>
+                    <span class="detail-value">{{ invoice.issue_date.strftime('%B %d, %Y') }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Due Date:</span>
+                    <span class="detail-value">{{ invoice.due_date.strftime('%B %d, %Y') }}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="detail-label">Total:</span>
+                    <span class="detail-value">${{ "%.2f"|format(invoice.total) }}</span>
+                </div>
+            </div>
+            
+            <div class="invoice-actions">
+                {% if invoice.status == 'pending' %}
+                <a href="{{ url_for('update_invoice_status', invoice_id=invoice.id, status='paid') }}" 
+                   class="btn btn-success btn-sm">
+                    <i class="fas fa-check"></i> Mark Paid
+                </a>
+                <a href="{{ url_for('update_invoice_status', invoice_id=invoice.id, status='overdue') }}" 
+                   class="btn btn-warning btn-sm">
+                    <i class="fas fa-exclamation-triangle"></i> Mark Overdue
+                </a>
+                {% elif invoice.status == 'overdue' %}
+                <a href="{{ url_for('update_invoice_status', invoice_id=invoice.id, status='paid') }}" 
+                   class="btn btn-success btn-sm">
+                    <i class="fas fa-check"></i> Mark Paid
+                </a>
+                <a href="{{ url_for('update_invoice_status', invoice_id=invoice.id, status='pending') }}" 
+                   class="btn btn-secondary btn-sm">
+                    <i class="fas fa-undo"></i> Mark Pending
+                </a>
+                {% elif invoice.status == 'paid' %}
+                <a href="{{ url_for('update_invoice_status', invoice_id=invoice.id, status='pending') }}" 
+                   class="btn btn-secondary btn-sm">
+                    <i class="fas fa-undo"></i> Mark Pending
+                </a>
+                {% endif %}
+                
+                <button class="btn btn-primary btn-sm" onclick="viewInvoice({{ invoice.id }})">
+                    <i class="fas fa-eye"></i> View
+                </button>
+                <button class="btn btn-info btn-sm" onclick="generateInvoicePDF({{ invoice.id }})">
+                    <i class="fas fa-file-pdf"></i> PDF
+                </button>
+                <a href="{{ url_for('delete_invoice', invoice_id=invoice.id) }}" 
+                   class="btn btn-danger btn-sm" 
+                   onclick="return confirm('Are you sure you want to delete this invoice?')">
+                    <i class="fas fa-trash"></i> Delete
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="text-center py-5">
+            <i class="fas fa-file-invoice fa-5x text-muted mb-3"></i>
+            <h3 class="text-muted">No Invoices Found</h3>
+            <p class="text-muted">
+                {% if search or status_filter %}
+                No invoices match your search criteria. <a href="{{ url_for('invoice_history') }}">Clear filters</a> to see all invoices.
+                {% else %}
+                You haven't created any invoices yet. <a href="{{ url_for('create_invoice') }}">Create your first invoice</a> to get started.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Invoice View Modal -->
+<div class="modal fade" id="viewInvoiceModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Invoice Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="invoiceViewContent">
+                    <!-- Invoice content will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-success" onclick="downloadCurrentInvoice()">
+                    <i class="fas fa-file-pdf"></i> Download PDF
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentInvoiceId = null;
+
+function viewInvoice(invoiceId) {
+    currentInvoiceId = invoiceId;
+    // For now, show a placeholder - in a real app, you'd fetch the invoice data
+    document.getElementById('invoiceViewContent').innerHTML = '<p>Loading invoice details...</p>';
+    new bootstrap.Modal(document.getElementById('viewInvoiceModal')).show();
+}
+
+function generateInvoicePDF(invoiceId) {
+    // Implementation for generating PDF for existing invoice
+    alert('PDF generation for invoice #' + invoiceId + ' would be implemented here');
+}
+
+function downloadCurrentInvoice() {
+    if (currentInvoiceId) {
+        generateInvoicePDF(currentInvoiceId);
+    }
+}
+</script>
+{% endblock %}
