@@ -20,7 +20,7 @@
             <div class="company-display">
                 <strong>{{ company.name }}</strong><br>
                 {% if company.address %}{{ company.address }}<br>{% endif %}
-                {% if company.city %}{{ company.city }}, {{ company.state }} {{ company.zip_code }}<br>{% endif %}
+                {% if company.city %}{{ company.city }}, {{ company.state }} {{ company.pin_code }}<br>{% endif %}
                 {% if company.phone %}Phone: {{ company.phone }}<br>{% endif %}
                 {% if company.email %}Email: {{ company.email }}{% endif %}
             </div>
@@ -64,8 +64,14 @@
                 <input type="text" id="client_state" name="client_state">
             </div>
             <div class="form-group">
-                <label for="client_zip">ZIP Code</label>
-                <input type="text" id="client_zip" name="client_zip">
+                <label for="client_pin">PIN Code</label>
+                <input type="text" id="client_pin" name="client_pin" placeholder="400001">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="client_gst">GST Number</label>
+                <input type="text" id="client_gst" name="client_gst" placeholder="27AAAAA0000A1Z5">
             </div>
         </div>
     </div>
@@ -85,8 +91,25 @@
                 <input type="date" id="due_date" name="due_date" required>
             </div>
             <div class="form-group">
-                <label for="tax_rate">Tax Rate (%)</label>
-                <input type="number" id="tax_rate" name="tax_rate" step="0.01" min="0" max="100" value="0" onchange="calculateTotals()">
+                <label for="gst_type">GST Type</label>
+                <select id="gst_type" name="gst_type" onchange="toggleGSTFields()">
+                    <option value="intra">Intra-State (CGST + SGST)</option>
+                    <option value="inter">Inter-State (IGST)</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row" id="gst_fields">
+            <div class="form-group" id="cgst_field">
+                <label for="cgst_rate">CGST Rate (%)</label>
+                <input type="number" id="cgst_rate" name="cgst_rate" step="0.01" min="0" max="50" value="9" onchange="calculateTotals()">
+            </div>
+            <div class="form-group" id="sgst_field">
+                <label for="sgst_rate">SGST Rate (%)</label>
+                <input type="number" id="sgst_rate" name="sgst_rate" step="0.01" min="0" max="50" value="9" onchange="calculateTotals()">
+            </div>
+            <div class="form-group" id="igst_field" style="display: none;">
+                <label for="igst_rate">IGST Rate (%)</label>
+                <input type="number" id="igst_rate" name="igst_rate" step="0.01" min="0" max="100" value="0" onchange="calculateTotals()">
             </div>
         </div>
     </div>
@@ -100,19 +123,38 @@
             <table class="items-table" id="itemsTable">
                 <thead>
                     <tr>
-                        <th>Description</th>
+                        <th>Product/Description</th>
+                        <th>HSN/SAC</th>
                         <th>Quantity</th>
-                        <th>Rate</th>
-                        <th>Total</th>
+                        <th>Unit</th>
+                        <th>Rate (₹)</th>
+                        <th>Total (₹)</th>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody id="itemsTableBody">
                     <tr class="item-row">
-                        <td><input type="text" name="item_description[]" class="form-control item-description" required></td>
+                        <td>
+                            <select name="item_product_id[]" class="form-control item-product" onchange="selectProduct(this)">
+                                <option value="">Select Product or Enter Custom</option>
+                                {% for product in products %}
+                                <option value="{{ product.id }}" 
+                                        data-name="{{ product.name }}"
+                                        data-description="{{ product.description }}"
+                                        data-rate="{{ product.rate }}"
+                                        data-unit="{{ product.unit }}"
+                                        data-hsn="{{ product.hsn_code }}">
+                                    {{ product.name }} - ₹{{ "%.2f"|format(product.rate) }}/{{ product.unit }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <input type="text" name="item_description[]" class="form-control item-description mt-2" placeholder="Or enter custom description" required>
+                        </td>
+                        <td><input type="text" name="item_hsn[]" class="form-control item-hsn" placeholder="1234"></td>
                         <td><input type="number" name="item_quantity[]" class="form-control item-quantity" step="0.01" min="0" onchange="calculateRowTotal(this)" required></td>
+                        <td><input type="text" name="item_unit[]" class="form-control item-unit" value="pcs"></td>
                         <td><input type="number" name="item_rate[]" class="form-control item-rate" step="0.01" min="0" onchange="calculateRowTotal(this)" required></td>
-                        <td class="item-total">$0.00</td>
+                        <td class="item-total">₹0.00</td>
                         <td><button type="button" class="btn btn-danger btn-sm" onclick="removeItem(this)"><i class="fas fa-trash"></i></button></td>
                     </tr>
                 </tbody>
@@ -127,15 +169,23 @@
     <div class="total-section">
         <div class="total-row">
             <span>Subtotal:</span>
-            <span id="subtotal">$0.00</span>
+            <span id="subtotal">₹0.00</span>
         </div>
-        <div class="total-row">
-            <span>Tax:</span>
-            <span id="tax">$0.00</span>
+        <div class="total-row" id="cgst_row">
+            <span>CGST (<span id="cgst_rate_display">9</span>%):</span>
+            <span id="cgst_amount">₹0.00</span>
+        </div>
+        <div class="total-row" id="sgst_row">
+            <span>SGST (<span id="sgst_rate_display">9</span>%):</span>
+            <span id="sgst_amount">₹0.00</span>
+        </div>
+        <div class="total-row" id="igst_row" style="display: none;">
+            <span>IGST (<span id="igst_rate_display">0</span>%):</span>
+            <span id="igst_amount">₹0.00</span>
         </div>
         <div class="total-row final">
             <span>Total:</span>
-            <span id="total">$0.00</span>
+            <span id="total">₹0.00</span>
         </div>
     </div>
 
@@ -194,7 +244,7 @@
 </div>
 
 <script>
-// Set default dates
+// Set default dates and initialize GST fields
 document.addEventListener('DOMContentLoaded', function() {
     const today = new Date();
     const due = new Date(today.getTime() + (30 * 24 * 60 * 60 * 1000)); // 30 days from now
@@ -202,8 +252,18 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('issue_date').value = today.toISOString().split('T')[0];
     document.getElementById('due_date').value = due.toISOString().split('T')[0];
     
+    // Initialize GST fields
+    toggleGSTFields();
+    
     // Load saved data from localStorage
-    loadFormData();
+    if (typeof loadFormData === 'function') {
+        loadFormData();
+    }
+    
+    // Calculate initial totals
+    if (typeof calculateTotals === 'function') {
+        calculateTotals();
+    }
 });
 </script>
 {% endblock %}

@@ -1,6 +1,6 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify
 from app import app, db
-from models import Company, Client, Invoice, LineItem
+from models import Company, Client, Invoice, LineItem, Product
 from datetime import datetime, timedelta
 from decimal import Decimal
 import logging
@@ -13,12 +13,14 @@ def index():
 def create_invoice():
     companies = Company.query.all()
     clients = Client.query.all()
-    return render_template('create_invoice.html', companies=companies, clients=clients)
+    products = Product.query.all()
+    return render_template('create_invoice.html', companies=companies, clients=clients, products=products)
 
 @app.route('/company-settings')
 def company_settings():
     company = Company.query.first()
-    return render_template('company_settings.html', company=company)
+    products = Product.query.all()
+    return render_template('company_settings.html', company=company, products=products)
 
 @app.route('/invoice-history')
 def invoice_history():
@@ -74,11 +76,12 @@ def save_company():
         company.address = request.form.get('address', '')
         company.city = request.form.get('city', '')
         company.state = request.form.get('state', '')
-        company.zip_code = request.form.get('zip_code', '')
+        company.pin_code = request.form.get('pin_code', '')
         company.phone = request.form.get('phone', '')
         company.email = request.form.get('email', '')
         company.website = request.form.get('website', '')
-        company.tax_id = request.form.get('tax_id', '')
+        company.gst_number = request.form.get('gst_number', '')
+        company.pan_number = request.form.get('pan_number', '')
         
         db.session.commit()
         flash('Company settings saved successfully!', 'success')
@@ -106,9 +109,10 @@ def save_invoice():
                 address=request.form.get('client_address', ''),
                 city=request.form.get('client_city', ''),
                 state=request.form.get('client_state', ''),
-                zip_code=request.form.get('client_zip', ''),
+                pin_code=request.form.get('client_pin', ''),
                 phone=request.form.get('client_phone', ''),
-                email=request.form.get('client_email', '')
+                email=request.form.get('client_email', ''),
+                gst_number=request.form.get('client_gst', '')
             )
             db.session.add(client)
             db.session.flush()  # To get the client ID
@@ -133,7 +137,9 @@ def save_invoice():
             due_date=due_date,
             notes=request.form.get('notes', ''),
             terms=request.form.get('terms', ''),
-            tax_rate=Decimal(request.form.get('tax_rate', '0')),
+            cgst_rate=Decimal(request.form.get('cgst_rate', '9')),
+            sgst_rate=Decimal(request.form.get('sgst_rate', '9')),
+            igst_rate=Decimal(request.form.get('igst_rate', '0')),
             company_id=company.id,
             client_id=client.id
         )
@@ -144,6 +150,9 @@ def save_invoice():
         descriptions = request.form.getlist('item_description[]')
         quantities = request.form.getlist('item_quantity[]')
         rates = request.form.getlist('item_rate[]')
+        hsn_codes = request.form.getlist('item_hsn[]')
+        units = request.form.getlist('item_unit[]')
+        product_ids = request.form.getlist('item_product_id[]')
         
         for i in range(len(descriptions)):
             if descriptions[i].strip():  # Only add non-empty descriptions
@@ -151,6 +160,9 @@ def save_invoice():
                     description=descriptions[i],
                     quantity=Decimal(quantities[i]),
                     rate=Decimal(rates[i]),
+                    hsn_code=hsn_codes[i] if i < len(hsn_codes) else '',
+                    unit=units[i] if i < len(units) else 'pcs',
+                    product_id=int(product_ids[i]) if i < len(product_ids) and product_ids[i] else None,
                     invoice_id=invoice.id
                 )
                 line_item.calculate_total()
@@ -201,3 +213,58 @@ def delete_invoice(invoice_id):
 def view_invoice(invoice_id):
     invoice = Invoice.query.get_or_404(invoice_id)
     return render_template('view_invoice.html', invoice=invoice)
+
+@app.route('/add-product', methods=['POST'])
+def add_product():
+    try:
+        company = Company.query.first()
+        if not company:
+            flash('Please set up company information first', 'error')
+            return redirect(url_for('company_settings'))
+        
+        product = Product(
+            name=request.form.get('product_name', ''),
+            description=request.form.get('product_description', ''),
+            rate=Decimal(request.form.get('product_rate', '0')),
+            unit=request.form.get('product_unit', 'pcs'),
+            hsn_code=request.form.get('product_hsn', ''),
+            gst_rate=Decimal(request.form.get('product_gst_rate', '18')),
+            company_id=company.id
+        )
+        
+        db.session.add(product)
+        db.session.commit()
+        flash(f'Product "{product.name}" added successfully!', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error adding product: {e}")
+        flash('Error adding product. Please try again.', 'error')
+    
+    return redirect(url_for('company_settings'))
+
+@app.route('/delete-product/<int:product_id>')
+def delete_product(product_id):
+    try:
+        product = Product.query.get_or_404(product_id)
+        db.session.delete(product)
+        db.session.commit()
+        flash('Product deleted successfully', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error deleting product: {e}")
+        flash('Error deleting product', 'error')
+    
+    return redirect(url_for('company_settings'))
+
+@app.route('/get-product/<int:product_id>')
+def get_product(product_id):
+    product = Product.query.get_or_404(product_id)
+    return jsonify({
+        'name': product.name,
+        'description': product.description,
+        'rate': float(product.rate),
+        'unit': product.unit,
+        'hsn_code': product.hsn_code,
+        'gst_rate': float(product.gst_rate)
+    })

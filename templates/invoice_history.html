@@ -22,11 +22,11 @@
         <div class="stat-label">Overdue Invoices</div>
     </div>
     <div class="stat-card">
-        <div class="stat-number">${{ "%.2f"|format(stats.total_revenue) }}</div>
+        <div class="stat-number">₹{{ "%.2f"|format(stats.total_revenue) }}</div>
         <div class="stat-label">Total Revenue</div>
     </div>
     <div class="stat-card">
-        <div class="stat-number">${{ "%.2f"|format(stats.pending_amount) }}</div>
+        <div class="stat-number">₹{{ "%.2f"|format(stats.pending_amount) }}</div>
         <div class="stat-label">Pending Amount</div>
     </div>
 </div>
@@ -93,7 +93,7 @@
                 </div>
                 <div class="detail-item">
                     <span class="detail-label">Total:</span>
-                    <span class="detail-value">${{ "%.2f"|format(invoice.total) }}</span>
+                    <span class="detail-value">₹{{ "%.2f"|format(invoice.total) }}</span>
                 </div>
             </div>
             

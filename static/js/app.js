@@ -55,13 +55,21 @@ function debounce(func, wait) {
 // Add new item row to the invoice
 function addItem() {
     const tableBody = document.getElementById('itemsTableBody');
+    const productOptions = document.querySelector('.item-product').innerHTML;
     const newRow = document.createElement('tr');
     newRow.className = 'item-row';
     newRow.innerHTML = `
-        <td><input type="text" name="item_description[]" class="form-control item-description" required></td>
+        <td>
+            <select name="item_product_id[]" class="form-control item-product" onchange="selectProduct(this)">
+                ${productOptions}
+            </select>
+            <input type="text" name="item_description[]" class="form-control item-description mt-2" placeholder="Or enter custom description" required>
+        </td>
+        <td><input type="text" name="item_hsn[]" class="form-control item-hsn" placeholder="1234"></td>
         <td><input type="number" name="item_quantity[]" class="form-control item-quantity" step="0.01" min="0" onchange="calculateRowTotal(this)" required></td>
+        <td><input type="text" name="item_unit[]" class="form-control item-unit" value="pcs"></td>
         <td><input type="number" name="item_rate[]" class="form-control item-rate" step="0.01" min="0" onchange="calculateRowTotal(this)" required></td>
-        <td class="item-total">$0.00</td>
+        <td class="item-total">₹0.00</td>
         <td><button type="button" class="btn btn-danger btn-sm" onclick="removeItem(this)"><i class="fas fa-trash"></i></button></td>
     `;
     tableBody.appendChild(newRow);
@@ -89,11 +97,11 @@ function calculateRowTotal(input) {
     const rate = parseFloat(row.querySelector('.item-rate').value) || 0;
     const total = quantity * rate;
     
-    row.querySelector('.item-total').textContent = formatCurrency(total);
+    row.querySelector('.item-total').textContent = formatCurrencyINR(total);
     calculateTotals();
 }
 
-// Calculate invoice totals
+// Calculate invoice totals with GST
 function calculateTotals() {
     const rows = document.querySelectorAll('.item-row');
     let subtotal = 0;
@@ -104,26 +112,114 @@ function calculateTotals() {
         subtotal += quantity * rate;
     });
     
-    const taxRate = parseFloat(document.getElementById('tax_rate')?.value) || 0;
-    const taxAmount = subtotal * (taxRate / 100);
-    const total = subtotal + taxAmount;
+    // Get GST rates
+    const cgstRate = parseFloat(document.getElementById('cgst_rate')?.value) || 0;
+    const sgstRate = parseFloat(document.getElementById('sgst_rate')?.value) || 0;
+    const igstRate = parseFloat(document.getElementById('igst_rate')?.value) || 0;
+    
+    // Calculate GST amounts
+    let cgstAmount = 0, sgstAmount = 0, igstAmount = 0;
+    
+    if (document.getElementById('gst_type')?.value === 'inter') {
+        // Inter-state: Use IGST
+        igstAmount = subtotal * (igstRate / 100);
+    } else {
+        // Intra-state: Use CGST + SGST
+        cgstAmount = subtotal * (cgstRate / 100);
+        sgstAmount = subtotal * (sgstRate / 100);
+    }
+    
+    const totalGST = cgstAmount + sgstAmount + igstAmount;
+    const total = subtotal + totalGST;
     
     // Update display
     const subtotalElement = document.getElementById('subtotal');
-    const taxElement = document.getElementById('tax');
+    const cgstElement = document.getElementById('cgst_amount');
+    const sgstElement = document.getElementById('sgst_amount');
+    const igstElement = document.getElementById('igst_amount');
     const totalElement = document.getElementById('total');
     
-    if (subtotalElement) subtotalElement.textContent = formatCurrency(subtotal);
-    if (taxElement) taxElement.textContent = formatCurrency(taxAmount);
-    if (totalElement) totalElement.textContent = formatCurrency(total);
+    // Update rate displays
+    const cgstRateDisplay = document.getElementById('cgst_rate_display');
+    const sgstRateDisplay = document.getElementById('sgst_rate_display');
+    const igstRateDisplay = document.getElementById('igst_rate_display');
+    
+    if (subtotalElement) subtotalElement.textContent = formatCurrencyINR(subtotal);
+    if (cgstElement) cgstElement.textContent = formatCurrencyINR(cgstAmount);
+    if (sgstElement) sgstElement.textContent = formatCurrencyINR(sgstAmount);
+    if (igstElement) igstElement.textContent = formatCurrencyINR(igstAmount);
+    if (totalElement) totalElement.textContent = formatCurrencyINR(total);
+    
+    if (cgstRateDisplay) cgstRateDisplay.textContent = cgstRate;
+    if (sgstRateDisplay) sgstRateDisplay.textContent = sgstRate;
+    if (igstRateDisplay) igstRateDisplay.textContent = igstRate;
 }
 
-// Format number as currency
-function formatCurrency(amount) {
-    return new Intl.NumberFormat('en-US', {
+// Format number as INR currency
+function formatCurrencyINR(amount) {
+    return new Intl.NumberFormat('en-IN', {
         style: 'currency',
-        currency: 'USD'
+        currency: 'INR'
     }).format(amount);
+}
+
+// Toggle GST fields based on type
+function toggleGSTFields() {
+    const gstType = document.getElementById('gst_type').value;
+    const cgstField = document.getElementById('cgst_field');
+    const sgstField = document.getElementById('sgst_field');
+    const igstField = document.getElementById('igst_field');
+    const cgstRow = document.getElementById('cgst_row');
+    const sgstRow = document.getElementById('sgst_row');
+    const igstRow = document.getElementById('igst_row');
+    
+    if (gstType === 'inter') {
+        // Inter-state: Show IGST, hide CGST/SGST
+        cgstField.style.display = 'none';
+        sgstField.style.display = 'none';
+        igstField.style.display = 'block';
+        cgstRow.style.display = 'none';
+        sgstRow.style.display = 'none';
+        igstRow.style.display = 'flex';
+        
+        // Set IGST to combined rate
+        const cgstRate = parseFloat(document.getElementById('cgst_rate').value) || 0;
+        const sgstRate = parseFloat(document.getElementById('sgst_rate').value) || 0;
+        document.getElementById('igst_rate').value = cgstRate + sgstRate;
+    } else {
+        // Intra-state: Show CGST/SGST, hide IGST
+        cgstField.style.display = 'block';
+        sgstField.style.display = 'block';
+        igstField.style.display = 'none';
+        cgstRow.style.display = 'flex';
+        sgstRow.style.display = 'flex';
+        igstRow.style.display = 'none';
+        
+        // Reset IGST
+        document.getElementById('igst_rate').value = 0;
+    }
+    
+    calculateTotals();
+}
+
+// Select product and fill details
+function selectProduct(selectElement) {
+    const selectedOption = selectElement.options[selectElement.selectedIndex];
+    const row = selectElement.closest('.item-row');
+    
+    if (selectedOption.value) {
+        // Fill product details
+        row.querySelector('.item-description').value = selectedOption.dataset.name;
+        row.querySelector('.item-rate').value = selectedOption.dataset.rate;
+        row.querySelector('.item-unit').value = selectedOption.dataset.unit;
+        row.querySelector('.item-hsn').value = selectedOption.dataset.hsn || '';
+        
+        // Calculate total if quantity is set
+        const quantityInput = row.querySelector('.item-quantity');
+        if (quantityInput.value) {
+            calculateRowTotal(quantityInput);
+        }
+    }
 }
 
 // Save form data to localStorage
@@ -285,8 +381,8 @@ function generatePreviewContent() {
                     <tr>
                         <td>${item.description}</td>
                         <td>${item.quantity}</td>
-                        <td>${formatCurrency(parseFloat(item.rate))}</td>
-                        <td>${formatCurrency(parseFloat(item.quantity) * parseFloat(item.rate))}</td>
+                        <td>${formatCurrencyINR(parseFloat(item.rate))}</td>
+                        <td>${formatCurrencyINR(parseFloat(item.quantity) * parseFloat(item.rate))}</td>
                     </tr>
                 `).join('')}
             </tbody>
@@ -295,15 +391,14 @@ function generatePreviewContent() {
         <div class="total-section">
             <div class="total-row">
                 <span>Subtotal:</span>
-                <span>${formatCurrency(formData.subtotal)}</span>
+                <span>${formatCurrencyINR(formData.subtotal)}</span>
             </div>
-            <div class="total-row">
-                <span>Tax (${formData.taxRate}%):</span>
-                <span>${formatCurrency(formData.taxAmount)}</span>
-            </div>
+            ${formData.cgstAmount > 0 ? `<div class="total-row"><span>CGST (${formData.cgstRate}%):</span><span>${formatCurrencyINR(formData.cgstAmount)}</span></div>` : ''}
+            ${formData.sgstAmount > 0 ? `<div class="total-row"><span>SGST (${formData.sgstRate}%):</span><span>${formatCurrencyINR(formData.sgstAmount)}</span></div>` : ''}
+            ${formData.igstAmount > 0 ? `<div class="total-row"><span>IGST (${formData.igstRate}%):</span><span>${formatCurrencyINR(formData.igstAmount)}</span></div>` : ''}
             <div class="total-row final">
                 <span>Total:</span>
-                <span>${formatCurrency(formData.total)}</span>
+                <span>${formatCurrencyINR(formData.total)}</span>
             </div>
         </div>
         
@@ -365,11 +460,24 @@ function getFormData() {
         }
     }
     
-    // Calculations
+    // GST Calculations
     data.subtotal = subtotal;
-    data.taxRate = parseFloat(data.tax_rate) || 0;
-    data.taxAmount = subtotal * (data.taxRate / 100);
-    data.total = subtotal + data.taxAmount;
+    data.cgstRate = parseFloat(data.cgst_rate) || 0;
+    data.sgstRate = parseFloat(data.sgst_rate) || 0;
+    data.igstRate = parseFloat(data.igst_rate) || 0;
+    
+    if (data.gst_type === 'inter') {
+        data.igstAmount = subtotal * (data.igstRate / 100);
+        data.cgstAmount = 0;
+        data.sgstAmount = 0;
+    } else {
+        data.cgstAmount = subtotal * (data.cgstRate / 100);
+        data.sgstAmount = subtotal * (data.sgstRate / 100);
+        data.igstAmount = 0;
+    }
+    
+    data.totalGST = data.cgstAmount + data.sgstAmount + data.igstAmount;
+    data.total = subtotal + data.totalGST;
     data.invoiceNumber = 'INV-PREVIEW';
     
     return data;
@@ -487,6 +595,8 @@ window.calculateRowTotal = calculateRowTotal;
 window.calculateTotals = calculateTotals;
 window.showPreview = showPreview;
 window.generatePDF = generatePDF;
+window.toggleGSTFields = toggleGSTFields;
+window.selectProduct = selectProduct;
 window.saveFormData = saveFormData;
 window.loadFormData = loadFormData;
 window.clearFormData = clearFormData;
